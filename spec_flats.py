@@ -472,6 +472,9 @@ class auxtel_flat:
 
         return
 
+    def nothing(self):
+        print('HOLA')
 
+        return
 
 
