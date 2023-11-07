@@ -227,9 +227,9 @@ def cut_flat_array(flat_img,amplis):
         return 
     else:
         flat_array_ = flat_img.image.array
-        cut_array = np.ones(flat_array_.shape)
+        cut_array_ = np.ones(flat_array_.shape)
         amplis_coords_ = get_amplis_coords(flat_img)
-
+        
         if isinstance(amplis,str):
             sel_amplis = [amplis]
         else:
@@ -239,18 +239,18 @@ def cut_flat_array(flat_img,amplis):
             x1_ = amplis_coords_[ampli_][1]
             y0_ = amplis_coords_[ampli_][2]
             y1_ = amplis_coords_[ampli_][3]
-
-            cut_array[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]
             
-        return cut_array
+            cut_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]
+            
+        return cut_array_
 
 
 def normalize_flat_array(flat_img,amplis):
     
     flat_array_ = flat_img.image.array
-    norm_array = np.ones(flat_array_.shape)
+    norm_array_ = np.ones(flat_array_.shape)
     amplis_coords_ = get_amplis_coords(flat_img)
-
+    
     if isinstance(amplis,str):
         sel_amplis = [amplis]
     else:
@@ -261,9 +261,139 @@ def normalize_flat_array(flat_img,amplis):
         y0_ = amplis_coords_[ampli_][2]
         y1_ = amplis_coords_[ampli_][3]
         
-        norm_array[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/np.median(flat_array_[y0_:y1_,x0_:x1_])
+        norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/np.median(flat_array_[y0_:y1_,x0_:x1_])
     
-    return norm_array
+    return norm_array_
+
+
+def smooth_flat_array(flat_img,amplis,window_size=40,normalize=True,transition=2000):
+    
+    if normalize==False:
+        print('WARNING: running on non-normalized data. Output will contain gain information')
+
+    if window_size%2==0:
+        window_size = window_size+1
+        print('ATTENTION: scipy.signal.medfilt2d does not like even numbers. Setting window_size = {0}'.format(window_size))
+    print('Window size for median smoothing = {0}'.format(window_size))
+
+    flat_array_ = flat_img.image.array
+    norm_array_ = np.ones(flat_array_.shape)
+    smooth_array_up = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
+    smooth_array_down = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
+    amplis_coords_ = get_amplis_coords(flat_img)
+    
+    if isinstance(amplis,str):
+        sel_amplis = [amplis]
+    else:
+        sel_amplis = list(amplis)
+
+    min_x0_up = []
+    max_x1_up = []
+    min_x0_down = []
+    max_x1_down = []
+    for ampli_ in sel_amplis:
+        x0_ = amplis_coords_[ampli_][0]
+        x1_ = amplis_coords_[ampli_][1]
+        y0_ = amplis_coords_[ampli_][2]
+        y1_ = amplis_coords_[ampli_][3]
+        
+        if normalize:
+            norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/np.median(flat_array_[y0_:y1_,x0_:x1_])
+        
+        if y1_<=transition:
+            smooth_array_up[:,x0_:x1_] = norm_array_[y0_:y1_,x0_:x1_]
+            min_x0_down.append(x0_)
+            max_x1_down.append(x1_)
+        else:
+            smooth_array_down[:,x0_:x1_] = norm_array_[y0_:y1_,x0_:x1_]
+            min_x0_up.append(x0_)
+            max_x1_up.append(x1_)
+        
+    x0_up = np.min(np.array(min_x0_up))
+    x1_up = np.max(np.array(max_x1_up))
+    x0_down = np.min(np.array(min_x0_down))
+    x1_down = np.max(np.array(max_x1_down))
+    
+    smooth_array_up[:,x0_up:x1_up] = medfilt2d(smooth_array_up[:,x0_up:x1_up],kernel_size=window_size)
+    smooth_array_down[:,x0_down:x1_down] = medfilt2d(smooth_array_down[:,x0_down:x1_down],kernel_size=window_size)
+    
+    smooth_array_ = np.concatenate([smooth_array_up,smooth_array_down],axis=0)
+    assert smooth_array_.shape==flat_array_.shape
+    
+    return smooth_array_
+    
+
+
+def special_flat_array(flat_img,amplis,smooth_array=None,window_size=40,normalize=True,transition=2000):
+    
+    if normalize==False:
+        print('WARNING: running on non-normalized data. Output will contain gain information')
+
+    if window_size%2==0:
+        window_size = window_size+1
+        print('ATTENTION: scipy.signal.medfilt2d does not like even numbers. Setting window_size = {0}'.format(window_size))
+    print('Window size for median smoothing = {0}'.format(window_size))
+    
+    flat_array_ = flat_img.image.array
+    norm_array_ = np.ones(flat_array_.shape)
+    special_array_ = np.ones(flat_array_.shape)
+    amplis_coords_ = get_amplis_coords(flat_img)
+
+    if isinstance(amplis,str):
+        sel_amplis = [amplis]
+    else:
+        sel_amplis = list(amplis)
+    
+    if smooth_array is None:
+        smooth_array_up = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
+        smooth_array_down = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
+        
+        min_x0_up = []
+        max_x1_up = []
+        min_x0_down = []
+        max_x1_down = []
+        for ampli_ in sel_amplis:
+            x0_ = amplis_coords_[ampli_][0]
+            x1_ = amplis_coords_[ampli_][1]
+            y0_ = amplis_coords_[ampli_][2]
+            y1_ = amplis_coords_[ampli_][3]
+            
+            if normalize:
+                norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/np.median(flat_array_[y0_:y1_,x0_:x1_])
+            
+            if y1_<=transition:
+                smooth_array_up[:,x0_:x1_] = norm_array_[y0_:y1_,x0_:x1_]
+                min_x0_down.append(x0_)
+                max_x1_down.append(x1_)
+            else:
+                smooth_array_down[:,x0_:x1_] = norm_array_[y0_:y1_,x0_:x1_]
+                min_x0_up.append(x0_)
+                max_x1_up.append(x1_)
+            
+        x0_up = np.min(np.array(min_x0_up))
+        x1_up = np.max(np.array(max_x1_up))
+        x0_down = np.min(np.array(min_x0_down))
+        x1_down = np.max(np.array(max_x1_down))
+        
+        smooth_array_up[:,x0_up:x1_up] = medfilt2d(smooth_array_up[:,x0_up:x1_up],kernel_size=window_size)
+        smooth_array_down[:,x0_down:x1_down] = medfilt2d(smooth_array_down[:,x0_down:x1_down],kernel_size=window_size)
+        
+        smooth_array_ = np.concatenate([smooth_array_up,smooth_array_down],axis=0)
+        assert smooth_array_.shape==flat_array_.shape
+        
+    else:
+        smooth_array_ = smooth_array
+    
+    for ampli_ in sel_amplis:
+        x0_ = amplis_coords_[ampli_][0]
+        x1_ = amplis_coords_[ampli_][1]
+        y0_ = amplis_coords_[ampli_][2]
+        y1_ = amplis_coords_[ampli_][3]
+
+        special_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/smooth_array_[y0_:y1_,x0_:x1_]
+    
+    return special_array_
+
 
 
 def get_amplis_coords(flat_img):
@@ -374,6 +504,7 @@ class auxtel_flat:
                 self.amplis.append('{0}'.format(i))
             for i in range(8):
                 self.amplis.append('0{0}'.format(7-i))
+            self.amplis = np.array(self.amplis)
             self.amplis_coords = self.amplis_coords_all
 
         return
@@ -402,7 +533,7 @@ class auxtel_flat:
             return
         '''
     
-    def normalize_flat_array(self):
+    def normalize_flat(self):
         
         self.norm_array = normalize_flat_array(self.flat_img,self.amplis)
 
@@ -421,7 +552,28 @@ class auxtel_flat:
         
         return
         '''
+    
+    
+    def smooth_flat(self,window_size=40,normalize=True):
         
+        print('Window size for smoothing window = ', window_size)
+        self.window_size = window_size
+        self.smooth_array = smooth_flat_array(self.flat_img,self.amplis,window_size=self.window_size,normalize=normalize,transition=self.transition)
+
+        return
+
+
+    def special_flat(self,window_size=40,normalize=True):
+
+        if hasattr(self,'smooth_array')==False:
+            print('ATTENTION: No smoothed flat array found. Creating it with window size = {0}'.format(window_size))
+            self.window_size = window_size
+            self.smooth_array = smooth_flat_array(self.flat_img,self.amplis,window_size=self.window_size,normalize=normalize,transition=self.transition)
+        
+        print('Window size for smoothing window = ', self.window_size)
+        self.special_array = special_flat_array(self.flat_img,self.amplis,smooth_array=self.smooth_array,
+                                                window_size=self.window_size,normalize=normalize,transition=self.transition)
+
     
     def plot_flat(self,show='flat',title=None,figsize=(10,10),cmap='gray',vmin=0.9,vmax=1.1,lognorm=False):
         
@@ -466,15 +618,50 @@ class auxtel_flat:
                 print('ATTENTION: flat was not normalized. Plotting nothing')
                 return
         
+        elif show=='smooth':
+            if hasattr(self,'smooth_array'):
+                data_ = self.smooth_array
+                if title is not None:
+                    title = title
+                else:
+                    title0 = 'Smoothed flat {0}, amplifiers = '.format(self.flat_id)
+                    title_amplis = ''
+                    for i in range(len(self.amplis)):
+                        title_amplis = title_amplis+'{0}'.format(self.amplis[i])
+                        if i<len(self.amplis)-1:
+                            title_amplis = title_amplis+', '
+                    title = title0+title_amplis
+
+            else:
+                print('ATTENTION: flat was not smoothed. Plotting nothing')
+                return
+        
+        elif show=='special':
+            if hasattr(self,'special_array'):
+                data_ = self.smooth_array
+                if title is not None:
+                    title = title
+                else:
+                    title0 = 'Special flat {0}, amplifiers = '.format(self.flat_id)
+                    title_amplis = ''
+                    for i in range(len(self.amplis)):
+                        title_amplis = title_amplis+'{0}'.format(self.amplis[i])
+                        if i<len(self.amplis)-1:
+                            title_amplis = title_amplis+', '
+                    title = title0+title_amplis
+
+            else:
+                print('ATTENTION: special flat was not created. Plotting nothing')
+                return
+
+        else:
+            print('ATTENTION: I do not know what to plot. Plotting nothing')
+            return
 
         plot_flat(data_,title=title,figsize=figsize,cmap=cmap,vmin=vmin,vmax=vmax,lognorm=lognorm,
                 butler=self.butler)
 
         return
 
-    def nothing(self):
-        print('HOLA')
-
-        return
 
 
