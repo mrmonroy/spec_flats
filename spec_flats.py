@@ -638,7 +638,7 @@ class auxtel_flat:
         
         elif show=='special':
             if hasattr(self,'special_array'):
-                data_ = self.smooth_array
+                data_ = self.special_array
                 if title is not None:
                     title = title
                 else:
