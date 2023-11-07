@@ -78,11 +78,22 @@ def find_flat_dates(obs_year=None,cameraName='LATISS',filter='empty',disperser='
 
 
 
-def find_closest_date(date,flat_dates,flat_ids):
+def find_closest_date(date,flat_ids=None,repo_embargo=True,cameraName='LATISS',filter='empty',disperser='empty',
+                        calibCollections=['LATISS/calib','LATISS/raw/all'],obs_type='flat'):
 
     obs_day = int(date)
     
     print('Requested observation date = ', obs_day)
+    
+    if flat_ids is not None:
+        assert isinstance(flat_ids,dict)
+        flat_dates = np.array(list(flat_ids.keys()))
+    
+    else:
+        obs_year = date[:4]
+        flat_dates, flat_ids, _ = find_flat_dates(obs_year=obs_year,cameraName=cameraName,filter=filter,disperser=disperser,
+                                                        obs_type=obs_type,repo_embargo=repo_embargo,calibCollections=calibCollections)
+    
     date_diff = int(obs_day)-flat_dates
     date_diff = date_diff[date_diff>=0]
     closest_idx = np.where(date_diff==np.min(date_diff))[0][0]
@@ -92,8 +103,6 @@ def find_closest_date(date,flat_dates,flat_ids):
     print('Corresponding flat IDs = ', closest_ids)
     
     return closest_date, closest_ids
-
-
 
 
 def check_flats(flat_ids,return_flats=True,butler=None,repo_embargo=True,cameraName='LATISS',detector=0,calibCollections=['LATISS/calib','LATISS/raw/all'],obs_type='flat'):
@@ -144,6 +153,22 @@ def check_flats(flat_ids,return_flats=True,butler=None,repo_embargo=True,cameraN
         return flat_array_dict
     else:
         return
+
+
+def get_amplis_coords(flat_img):
+    
+    amplis_coords = {}
+
+    for ampIdx, amp in enumerate(flat_img.getDetector()):
+        ampName = amp.getName()
+        xbegin = amp.getBBox().x.begin
+        xend = amp.getBBox().x.end
+        ybegin = amp.getBBox().y.begin
+        yend = amp.getBBox().y.end
+        amplis_coords[ampName] = (xbegin,xend,ybegin,yend)
+        
+    return amplis_coords
+
 
 def get_flat_metadata(flat_id=None,flat_img=None,butler=None):
     
@@ -393,22 +418,6 @@ def special_flat_array(flat_img,amplis,smooth_array=None,window_size=40,normaliz
         special_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/smooth_array_[y0_:y1_,x0_:x1_]
     
     return special_array_
-
-
-
-def get_amplis_coords(flat_img):
-    
-    amplis_coords = {}
-
-    for ampIdx, amp in enumerate(flat_img.getDetector()):
-        ampName = amp.getName()
-        xbegin = amp.getBBox().x.begin
-        xend = amp.getBBox().x.end
-        ybegin = amp.getBBox().y.begin
-        yend = amp.getBBox().y.end
-        amplis_coords[ampName] = (xbegin,xend,ybegin,yend)
-        
-    return amplis_coords
 
 
 
