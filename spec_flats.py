@@ -612,7 +612,7 @@ class auxtel_flat:
             if self.window_size!=window_size:
                 print('ATTENTION: Current smoothed flat has window_size = {0}. Creating it with window size = {1}'.format(self.window_size,window_size))
                 self.window_size = window_size
-            elif self.kernel!=kernel:
+            if self.kernel!=kernel:
                 print('ATTENTION: Current smoothed flat was computed with kernel = {0}. Creating it with kernel = {1}'.format(self.kernel,kernel))
                 self.kernel = kernel
             '''
