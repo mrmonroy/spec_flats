@@ -33,16 +33,16 @@ from lsst.daf.butler import CollectionType
 
 
 
-def find_flat_dates(obs_year=None,cameraName='LATISS',filter='empty',disperser='empty',obs_type='flat',repo_embargo=True,
-                    calibCollections=['LATISS/calib','LATISS/raw/all']):
+def find_flat_dates(obs_year=None,cameraName='LATISS',filter='empty',disperser='empty',obs_type='flat',repo='/repo/embargo_old',
+                    calibCollections=['LATISS/calib/legacy','LATISS/raw/all']):
     
     physical_filter = '{0}~{1}'.format(filter,disperser)
-    
+    '''
     if repo_embargo:
         repo = "/sdf/group/rubin/repo/oga/"
     else:
         repo = "/sdf/group/rubin/repo/main/"
-    
+    '''
     butler = dafButler.Butler(repo)
     registry = butler.registry
 
