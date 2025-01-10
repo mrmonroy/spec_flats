@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import LogNorm
 import time
+from copy import deepcopy
 
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -34,7 +35,7 @@ from lsst.daf.butler import CollectionType
 
 
 def find_flat_dates(obs_year=None,cameraName='LATISS',filter='empty',disperser='empty',obs_type='flat',repo='/repo/embargo_old',
-                    calibCollections=['LATISS/calib/legacy','LATISS/raw/all']):
+                    calibCollections=['LATISS/calib','LATISS/raw/all']):
     
     physical_filter = '{0}~{1}'.format(filter,disperser)
     '''
@@ -483,10 +484,27 @@ def plot_flat(flat_data,title=None,figsize=(10,10),cmap='gray',vmin=0.9,vmax=1.1
     return 
 
 
+def save_flat(flat_data,flat_metadata,filename,outdir,overwrite=True):
+    print(f">>>>  output filename {filename}")
+    
+    hdr = fits.Header()
+    
+    for key,value in flat_metadata.items():
+        hdr[str(key)] = value
+    
+    # Be carefull for Spectractor, 2 hdu units are necessary
+    
+    primary_hdu = fits.PrimaryHDU(header=hdr)
+    image_hdu = fits.ImageHDU(flat_data)
+    
+    hdu_list = fits.HDUList([primary_hdu, image_hdu])
+    
+    hdu_list.writeto(os.path.join(outdir,filename),overwrite=overwrite) 
+
 
 class auxtel_flat:
 
-    def __init__(self,flat_id,butler=None,obs_type='flat',cameraName='LATISS',detector=0,embargo=True,
+    def __init__(self,flat_id,butler=None,obs_type='flat',cameraName='LATISS',detector=0,repo='/repo/embargo_old',
                 calibCollections=['LATISS/calib','LATISS/raw/all'],transition=2000):
         
         self.cameraName = cameraName
@@ -496,11 +514,15 @@ class auxtel_flat:
         self.flat_id = flat_id
 
         if butler is None:
+            aa
+
+            '''
             if embargo:
                 self.repo = "/sdf/group/rubin/repo/oga/"
             else:
                 self.repo = "/sdf/group/rubin/repo/main/"
-           
+            '''
+            self.repo = repo
             ####################### Butler 
             print('Butler repo: ',self.repo)
             self.butler = dafButler.Butler(self.repo)
@@ -538,10 +560,10 @@ class auxtel_flat:
         else:
             self.amplis = []
             for i in range(10,18):
-                self.amplis.append('{0}'.format(i))
+                self.amplis.append('C{0}'.format(i))
             for i in range(8):
-                self.amplis.append('0{0}'.format(7-i))
-            self.amplis = np.array(self.amplis)
+                self.amplis.append('C0{0}'.format(7-i))
+            self.amplis = list(self.amplis)
             self.amplis_coords = self.amplis_coords_all
 
         return
@@ -653,7 +675,6 @@ class auxtel_flat:
 
             else:
                 print('ATTENTION: flat was not cut. Plotting nothing')
-                return
 
         elif show=='norm':
             if hasattr(self,'norm_array'):
@@ -671,7 +692,6 @@ class auxtel_flat:
 
             else:
                 print('ATTENTION: flat was not normalized. Plotting nothing')
-                return
         
         elif show=='smooth':
             if hasattr(self,'smooth_array'):
@@ -689,7 +709,6 @@ class auxtel_flat:
 
             else:
                 print('ATTENTION: flat was not smoothed. Plotting nothing')
-                return
         
         elif show=='special':
             if hasattr(self,'special_array'):
@@ -707,16 +726,51 @@ class auxtel_flat:
 
             else:
                 print('ATTENTION: special flat was not created. Plotting nothing')
-                return
 
         else:
             print('ATTENTION: I do not know what to plot. Plotting nothing')
-            return
 
         plot_flat(data_,title=title,figsize=figsize,cmap=cmap,vmin=vmin,vmax=vmax,lognorm=lognorm,
                 butler=self.butler)
 
         return
 
+    def save(self,flat_type,filename,outdir,overwrite=True):
+        
+        metadata_ = deepcopy(self.metadata)
+        if flat_type=='flat':
+            data_ = self.flat_array
+            
+        elif flat_type=='cut_flat':
+            if hasattr(self,'cut_array'):
+                data_ = self.cut_array
+            else:
+                print('ATTENTION: cut flat was not created. Saving nothing')
+                
+        elif flat_type=='norm':
+            if hasattr(self,'norm_array'):
+                data_ = self.norm_array
+            else:
+                print('ATTENTION: normalised flat was not created. Saving nothing')
+
+        elif flat_type=='smooth':
+            if hasattr(self,'smooth_array'):
+                data_ = self.smooth_array
+                metadata_['KERNEL_TYPE'] = self.kernel
+                metadata_['KERNEL_WINDOW_SIZE'] = self.window_size
+            else:
+                print('ATTENTION: smooth flat was not created. Saving nothing')
+
+        elif flat_type=='special':
+            if hasattr(self,'special_array'):
+                data_ = self.special_array
+                metadata_['KERNEL_TYPE'] = self.kernel
+                metadata_['KERNEL_WINDOW_SIZE'] = self.window_size
+            else:
+                print('ATTENTION: special flat was not created. Saving nothing')
+                
+        save_flat(data_,metadata_,filename,outdir,overwrite=overwrite)
+        
+        return
 
 
