@@ -34,8 +34,7 @@ from lsst.daf.butler import CollectionType
 
 
 
-def find_flat_dates(obs_year=None,cameraName='LATISS',filter='empty',disperser='empty',obs_type='flat',repo='/repo/embargo_old',
-                    calibCollections=['LATISS/calib','LATISS/raw/all']):
+def find_flat_dates(obs_year=None,cameraName='LATISS',filter='empty',disperser='empty',obs_type='flat',repo='/repo/embargo_old', calibCollections=['LATISS/calib','LATISS/raw/all']):
     
     physical_filter = '{0}~{1}'.format(filter,disperser)
     '''
