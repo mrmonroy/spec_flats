@@ -271,7 +271,7 @@ def cut_flat_array(flat_img,amplis):
         return cut_array_
 
 
-def normalize_flat_array(flat_img,amplis):
+def normalize_flat_array(flat_img,amplis,norm='median'):
     
     flat_array_ = flat_img.image.array
     norm_array_ = np.ones(flat_array_.shape)
@@ -287,12 +287,18 @@ def normalize_flat_array(flat_img,amplis):
         y0_ = amplis_coords_[ampli_][2]
         y1_ = amplis_coords_[ampli_][3]
         
-        norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/np.median(flat_array_[y0_:y1_,x0_:x1_])
+        print('Normalising by {0}'.format(norm))
+        if norm=='median':
+            norm_ = np.median(flat_array_[y0_:y1_,x0_:x1_])
+        elif norm=='mean':
+            norm_ = np.mean(flat_array_[y0_:y1_,x0_:x1_])
+
+        norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/norm_
     
     return norm_array_
 
 
-def smooth_flat_array(flat_img,amplis,kernel='mean',window_size=40,mode='mirror',percentile=1.,normalize=True,return_norm_array=False,transition=2000):
+def smooth_flat_array(flat_img,amplis,kernel='median',sep_amplis=True,window_size=40,mode='mirror',percentile=1.,normalize=True,norm='median',return_norm_array=False,transition=2000):
     
     if normalize==False:
         print('WARNING: running on non-normalized data. Output will contain gain information')
@@ -304,8 +310,18 @@ def smooth_flat_array(flat_img,amplis,kernel='mean',window_size=40,mode='mirror'
     '''
     flat_array_ = flat_img.image.array
     norm_array_ = np.ones(flat_array_.shape)
-    smooth_array_up = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
-    smooth_array_down = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
+    
+    if sep_amplis:
+        print('ATTENTION: doing {0} smoothing on each amplifier SEPARATELY'.format(kernel))
+        smooth_array_ = np.ones(flat_array_.shape)
+    else:
+        print('ATTENTION: doing {0} smoothing on all upper / lower amplifiers TOGETHER'.format(kernel))
+        smooth_array_up = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
+        smooth_array_down = np.ones((int(flat_array_.shape[0]/2),flat_array_.shape[1]))
+        min_x0_up = []
+        max_x1_up = []
+        min_x0_down = []
+        max_x1_down = []
     amplis_coords_ = get_amplis_coords(flat_img)
     
     if isinstance(amplis,str):
@@ -313,10 +329,7 @@ def smooth_flat_array(flat_img,amplis,kernel='mean',window_size=40,mode='mirror'
     else:
         sel_amplis = list(amplis)
 
-    min_x0_up = []
-    max_x1_up = []
-    min_x0_down = []
-    max_x1_down = []
+
     for ampli_ in sel_amplis:
         x0_ = amplis_coords_[ampli_][0]
         x1_ = amplis_coords_[ampli_][1]
@@ -324,21 +337,31 @@ def smooth_flat_array(flat_img,amplis,kernel='mean',window_size=40,mode='mirror'
         y1_ = amplis_coords_[ampli_][3]
         
         if normalize:
-            norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/np.median(flat_array_[y0_:y1_,x0_:x1_])
-        
-        if y1_<=transition:
-            smooth_array_up[:,x0_:x1_] = np.copy(norm_array_[y0_:y1_,x0_:x1_])
-            min_x0_down.append(x0_)
-            max_x1_down.append(x1_)
+            if norm=='median':
+                norm_ = np.median(flat_array_[y0_:y1_,x0_:x1_])
+            elif norm=='mean':
+                norm_ = np.mean(flat_array_[y0_:y1_,x0_:x1_])
+            norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/norm_
         else:
-            smooth_array_down[:,x0_:x1_] = np.copy(norm_array_[y0_:y1_,x0_:x1_])
-            min_x0_up.append(x0_)
-            max_x1_up.append(x1_)
+            norm_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]
         
-    x0_up = np.min(np.array(min_x0_up))
-    x1_up = np.max(np.array(max_x1_up))
-    x0_down = np.min(np.array(min_x0_down))
-    x1_down = np.max(np.array(max_x1_down))
+        smooth_array_[y0_:y1_,x0_:x1_] = np.copy(norm_array_[y0_:y1_,x0_:x1_])
+        
+        if sep_amplis==False:
+            if y1_<=transition:
+                #smooth_array_up[:,x0_:x1_] = np.copy(norm_array_[y0_:y1_,x0_:x1_])
+                min_x0_up.append(x0_)
+                max_x1_up.append(x1_)
+            else:
+                #smooth_array_down[:,x0_:x1_] = np.copy(norm_array_[y0_:y1_,x0_:x1_])
+                min_x0_down.append(x0_)
+                max_x1_down.append(x1_)
+    
+    if sep_amplis==False:
+        x0_up = np.min(np.array(min_x0_up))
+        x1_up = np.max(np.array(max_x1_up))
+        x0_down = np.min(np.array(min_x0_down))
+        x1_down = np.max(np.array(max_x1_down))
     
     t1 = time.time()
     #smooth_array_up[:,x0_up:x1_up] = medfilt2d(smooth_array_up[:,x0_up:x1_up],kernel_size=window_size)
@@ -346,40 +369,79 @@ def smooth_flat_array(flat_img,amplis,kernel='mean',window_size=40,mode='mirror'
     if kernel=='gauss':
         print('Smoothing with Gaussian filter')
         print('ATTENTION: window size should be equal to Gaussian standard deviation (sigma)')
-        smooth_array_up[:,x0_up:x1_up] = gaussian_filter(smooth_array_up[:,x0_up:x1_up],sigma=window_size,mode=mode)
-        smooth_array_down[:,x0_down:x1_down] = gaussian_filter(smooth_array_down[:,x0_down:x1_down],sigma=window_size,mode=mode)
+        if sep_amplis:
+            for ampli_ in sel_amplis:
+                print('Smoothing amplifier {0}'.format(ampli_))
+                x0_ = amplis_coords_[ampli_][0]
+                x1_ = amplis_coords_[ampli_][1]
+                y0_ = amplis_coords_[ampli_][2]
+                y1_ = amplis_coords_[ampli_][3]
+
+                smooth_array_[y0:y1_,x0_:x1_] = gaussian_filter(smooth_array_[y0_:y1_,x0_:x1_],sigma=window_size,mode=mode)
+        else:
+            smooth_array_up[:,x0_up:x1_up] = gaussian_filter(smooth_array_up[:,x0_up:x1_up],sigma=window_size,mode=mode)
+            smooth_array_down[:,x0_down:x1_down] = gaussian_filter(smooth_array_down[:,x0_down:x1_down],sigma=window_size,mode=mode)
         
     elif kernel=='mean':
         print('Smoothing with mean filter')
         
-        mask_up = (smooth_array_up[:,x0_up:x1_up]>=np.percentile(smooth_array_up[:,x0_up:x1_up].flatten(),percentile))*(smooth_array_up[:,x0_up:x1_up]<=np.percentile(smooth_array_up[:,x0_up:x1_up].flatten(),100.-percentile))
-        masked_array_up = np.ma.array(smooth_array_up[:,x0_up:x1_up],mask=mask_up,fill_value=-999)
-        mask_down = (smooth_array_down[:,x0_down:x1_down]>=np.percentile(smooth_array_down[:,x0_down:x1_down].flatten(),percentile))*(smooth_array_down[:,x0_down:x1_down]<=np.percentile(smooth_array_down[:,x0_down:x1_down].flatten(),100.-percentile))
-        masked_array_down = np.ma.array(smooth_array_down[:,x0_down:x1_down],mask=mask_down,fill_value=-999)
-        
-        print('Masking outliers beyond {0:.2f} and {1:.2f} percentiles'.format(percentile,100.-percentile))
-        inter_array_up = np.copy(smooth_array_up)
-        inter_array_down = np.copy(smooth_array_down)
-        inter_array_up[:,x0_up:x1_up][~masked_array_up.mask] = np.median(smooth_array_up[:,x0_up:x1_up].flatten())
-        inter_array_down[:,x0_down:x1_down][~masked_array_down.mask] = np.median(smooth_array_down[:,x0_down:x1_down].flatten())
-        
-        inter_array_ = np.concatenate([inter_array_up,inter_array_down],axis=0)
-        
-        smooth_array_up[:,x0_up:x1_up] = uniform_filter(inter_array_up[:,x0_up:x1_up],size=window_size,mode=mode)
-        smooth_array_down[:,x0_down:x1_down] = uniform_filter(inter_array_down[:,x0_down:x1_down],size=window_size,mode=mode)
+        if sep_amplis:
+            for ampli_ in sel_amplis:
+                print('Smoothing amplifier {0}'.format(ampli_))
+                x0_ = amplis_coords_[ampli_][0]
+                x1_ = amplis_coords_[ampli_][1]
+                y0_ = amplis_coords_[ampli_][2]
+                y1_ = amplis_coords_[ampli_][3]
+                
+                mask_ = (smooth_array_[y0_:y1_,x0_:x1_]>=np.percentile(smooth_array_[y0_:y1_,x0_:x1_].flatten(),percentile))*(smooth_array_[y0_:y1_,x0_:x1_]<=np.percentile(smooth_array_[y0_:y1_,x0_:x1_].flatten(),100.-percentile))
+                masked_array_ = np.ma.array(smooth_array_[y0_:y1_,x0_:x1_],mask=mask_,fill_value=-999)
+                
+                print('Masking outliers beyond {0:.2f} and {1:.2f} percentiles'.format(percentile,100.-percentile))
+                inter_array_ = np.copy(smooth_array_[y0_:y1_,x0_:x1_])
+                inter_array_[~masked_array_.mask] = np.median(smooth_array_[y0_:y1_,x0_:x1_].flatten())
+                
+                smooth_array_[y0_:y1_,x0_:x1_] = uniform_filter(inter_array_,size=window_size,mode=mode)
+        else:
+            mask_up = (smooth_array_up[:,x0_up:x1_up]>=np.percentile(smooth_array_up[:,x0_up:x1_up].flatten(),percentile))*(smooth_array_up[:,x0_up:x1_up]<=np.percentile(smooth_array_up[:,x0_up:x1_up].flatten(),100.-percentile))
+            masked_array_up = np.ma.array(smooth_array_up[:,x0_up:x1_up],mask=mask_up,fill_value=-999)
+            mask_down = (smooth_array_down[:,x0_down:x1_down]>=np.percentile(smooth_array_down[:,x0_down:x1_down].flatten(),percentile))*(smooth_array_down[:,x0_down:x1_down]<=np.percentile(smooth_array_down[:,x0_down:x1_down].flatten(),100.-percentile))
+            masked_array_down = np.ma.array(smooth_array_down[:,x0_down:x1_down],mask=mask_down,fill_value=-999)
+            
+            print('Masking outliers beyond {0:.2f} and {1:.2f} percentiles'.format(percentile,100.-percentile))
+            inter_array_up = np.copy(smooth_array_up)
+            inter_array_down = np.copy(smooth_array_down)
+            inter_array_up[:,x0_up:x1_up][~masked_array_up.mask] = np.median(smooth_array_up[:,x0_up:x1_up].flatten())
+            inter_array_down[:,x0_down:x1_down][~masked_array_down.mask] = np.median(smooth_array_down[:,x0_down:x1_down].flatten())
+            
+            inter_array_ = np.concatenate([inter_array_up,inter_array_down],axis=0)
+            
+            smooth_array_up[:,x0_up:x1_up] = uniform_filter(inter_array_up[:,x0_up:x1_up],size=window_size,mode=mode)
+            smooth_array_down[:,x0_down:x1_down] = uniform_filter(inter_array_down[:,x0_down:x1_down],size=window_size,mode=mode)
         
     elif kernel=='median':
         print('Smoothing with median filter')
-        smooth_array_up[:,x0_up:x1_up] = median_filter(smooth_array_up[:,x0_up:x1_up],size=(window_size,window_size),mode=mode)
-        smooth_array_down[:,x0_down:x1_down] = median_filter(smooth_array_down[:,x0_down:x1_down],size=(window_size,window_size),mode=mode)
+        if sep_amplis:
+            for ampli_ in sel_amplis:
+                print('Smoothing amplifier {0}'.format(ampli_))
+                x0_ = amplis_coords_[ampli_][0]
+                x1_ = amplis_coords_[ampli_][1]
+                y0_ = amplis_coords_[ampli_][2]
+                y1_ = amplis_coords_[ampli_][3]
+
+                smooth_array_[y0_:y1_,x0_:x1_] = median_filter(smooth_array_[y0_:y1_,x0_:x1_],size=(window_size,window_size),mode=mode)
+        else:
+            smooth_array_up[:,x0_up:x1_up] = median_filter(smooth_array_up[:,x0_up:x1_up],size=(window_size,window_size),mode=mode)
+            smooth_array_down[:,x0_down:x1_down] = median_filter(smooth_array_down[:,x0_down:x1_down],size=(window_size,window_size),mode=mode)
     else:
         raise IOError('I do not know this kernel')
     t2 = time.time()
     print('Time for smoothing = {0:.4f}s'.format(t2-t1))
-        
-    smooth_array_ = np.concatenate([smooth_array_up,smooth_array_down],axis=0)
+    
+    if sep_amplis==False:
+        smooth_array_ = np.concatenate([smooth_array_up,smooth_array_down],axis=0)
     assert smooth_array_.shape==flat_array_.shape
     
+    '''
     if kernel=='mean' and return_norm_array:
         return smooth_array_, norm_array_, inter_array_ #, masked_array_up, masked_array_down
     elif kernel=='mean':
@@ -388,10 +450,14 @@ def smooth_flat_array(flat_img,amplis,kernel='mean',window_size=40,mode='mirror'
         return smooth_array_, norm_array_
     else:
         return smooth_array_
-    
+    '''
+    if return_norm_array:
+        return smooth_array_, norm_array_
+    else:
+        return smooth_array_
 
 
-def special_flat_array(flat_img,amplis,smooth_array=None,kernel='mean',window_size=40,mode='mirror',percentile=1.,normalize=True,return_norm_array=False,transition=2000):
+def special_flat_array(flat_img,amplis,sep_amplis=True,smooth_array=None,kernel='mean',window_size=40,mode='mirror',percentile=1.,normalize=True,norm='median',return_norm_array=False,transition=2000):
     
     if normalize==False:
         print('WARNING: running on non-normalized data. Output will contain gain information')
@@ -412,18 +478,20 @@ def special_flat_array(flat_img,amplis,smooth_array=None,kernel='mean',window_si
     else:
         sel_amplis = list(amplis)
     
-    inter_ = False
+    #inter_ = False
     if smooth_array is None:
         norm_array_ = np.ones(flat_array_.shape)
+        '''
         if kernel=='mean' and return_norm_array:
-            smooth_array_, norm_array_, inter_array_ = smooth_flat_array(flat_img,amplis,kernel=kernel,window_size=window_size,mode=mode,
+            smooth_array_, norm_array_, inter_array_ = smooth_flat_array(flat_img,amplis,sep_amplis=sep_amplis,kernel=kernel,window_size=window_size,mode=mode,
                                                             percentile=1.,normalize=normalize,return_norm_array=return_norm_array,transition=transition)
             inter_ = True
-        elif return_norm_array:
-            smooth_array_, norm_array_ = smooth_flat_array(flat_img,amplis,kernel=kernel,window_size=window_size,mode=mode,
-                                                            percentile=1.,normalize=normalize,return_norm_array=return_norm_array,transition=transition)
+        '''
+        if return_norm_array:
+            smooth_array_, norm_array_ = smooth_flat_array(flat_img,amplis,kernel=kernel,sep_amplis=sep_amplis,window_size=window_size,mode=mode,
+                                                            percentile=1.,normalize=normalize,norm=norm,return_norm_array=return_norm_array,transition=transition)
         else:
-            smooth_array_ = smooth_flat_array(flat_img,amplis,kernel=kernel,window_size=window_size,mode=mode,percentile=1.,normalize=normalize,transition=transition)
+            smooth_array_ = smooth_flat_array(flat_img,amplis,kernel=kernel,sep_amplis=sep_amplis,window_size=window_size,mode=mode,percentile=1.,normalize=normalize,norm=norm,transition=transition)
         
     else:
         print('Using previously created smooth array')
@@ -437,11 +505,11 @@ def special_flat_array(flat_img,amplis,smooth_array=None,kernel='mean',window_si
 
         special_array_[y0_:y1_,x0_:x1_] = flat_array_[y0_:y1_,x0_:x1_]/smooth_array_[y0_:y1_,x0_:x1_]
     
-    if inter_ and return_norm_array:
-        return special_array_, norm_array_, inter_array_
-    elif inter_:
-        return special_array_, inter_array_
-    elif return_norm_array:
+    #if inter_ and return_norm_array:
+    #    return special_array_, norm_array_, inter_array_
+    #elif inter_:
+    #    return special_array_, inter_array_
+    if return_norm_array:
         return special_array_, norm_array_
     else:
         return special_array_
@@ -575,14 +643,14 @@ class auxtel_flat:
         
         return
     
-    def normalize_flat(self):
+    def normalize_flat(self,norm='median'):
         
-        self.norm_array = normalize_flat_array(self.flat_img,self.amplis)
+        self.norm_array = normalize_flat_array(self.flat_img,self.amplis,norm=norm)
 
         return
     
     
-    def smooth_flat(self,kernel='mean',window_size=40,mode='mirror',normalize=True):
+    def smooth_flat(self,kernel='median',sep_amplis=True,window_size=40,mode='mirror',normalize=True,norm='median'):
         if hasattr(self,'norm_array')==False:
             print('Normalized array not found. Normalizing it now')
             return_norm_array = True
@@ -592,22 +660,23 @@ class auxtel_flat:
         print('Window size for {0} smoothing = {1}'.format(kernel,window_size))
         self.window_size = window_size
         self.kernel = kernel
+        '''
         if kernel=='mean' and return_norm_array:
             self.smooth_array, self.norm_array, self.inter_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,window_size=self.window_size,mode=mode,
                                                                     normalize=normalize,return_norm_array=return_norm_array,transition=self.transition)
         elif kernel=='mean':
             self.smooth_array, self.inter_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,window_size=self.window_size,mode=mode,
                                                                     normalize=normalize,transition=self.transition)
-        elif return_norm_array:
-            self.smooth_array, self.norm_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,window_size=self.window_size,mode=mode,
-                                                                    normalize=normalize,return_norm_array=return_norm_array,transition=self.transition)
+        '''
+        if return_norm_array:
+            self.smooth_array, self.norm_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,sep_amplis=sep_amplis,window_size=self.window_size,                                                                 mode=mode,normalize=normalize,norm=norm,return_norm_array=return_norm_array,transition=self.transition)
         else:
-            self.smooth_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,window_size=self.window_size,mode=mode,normalize=normalize,transition=self.transition)
+            self.smooth_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,sep_amplis=sep_amplis,window_size=self.window_size,mode=mode,                                                                        normalize=normalize,norm=norm,transition=self.transition)
 
         return
 
 
-    def special_flat(self,kernel='mean',window_size=40,mode='mirror',normalize=True):
+    def special_flat(self,kernel='median',sep_amplis=True,window_size=40,mode='mirror',normalize=True,norm='median'):
         if hasattr(self,'norm_array')==False:
             print('Normalized array not found. Normalizing it now')
             return_norm_array = True
@@ -628,6 +697,7 @@ class auxtel_flat:
             else:
                 self.smooth_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,window_size=self.window_size,mode=mode,normalize=normalize,transition=self.transition)
             '''
+            self.smooth_flat(kernel=self.kernel,sep_amplis=sep_amplis,window_size=self.window_size,mode=mode,normalize=normalize,norm=norm)
         
         elif hasattr(self,'smooth_array') and (self.window_size!=window_size or self.kernel!=kernel):
             if self.window_size!=window_size:
@@ -643,11 +713,12 @@ class auxtel_flat:
             else:
                 self.smooth_array = smooth_flat_array(self.flat_img,self.amplis,kernel=self.kernel,window_size=self.window_size,mode=mode,normalize=normalize,transition=self.transition)
             '''
-        self.smooth_flat(kernel=self.kernel,window_size=self.window_size,mode=mode,normalize=normalize)
+            self.smooth_flat(kernel=self.kernel,sep_amplis=sep_amplis,window_size=self.window_size,mode=mode,normalize=normalize,norm=norm)
+        
         
         print('Window size for {0} smoothing = {1}'.format(self.kernel,self.window_size))
-        self.special_array = special_flat_array(self.flat_img,self.amplis,smooth_array=self.smooth_array,kernel=self.kernel,
-                                                window_size=self.window_size,mode=mode,normalize=normalize,transition=self.transition)
+        self.special_array = special_flat_array(self.flat_img,self.amplis,smooth_array=self.smooth_array,kernel=self.kernel,sep_amplis=sep_amplis,
+                                                window_size=self.window_size,mode=mode,normalize=normalize,norm=norm,transition=self.transition)
         return
 
     
